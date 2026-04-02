@@ -50,9 +50,16 @@ self.addEventListener("activate", event => {
 // Fetch handler
 self.addEventListener("fetch", event => {
   const request = event.request;
+  const url = new URL(request.url);
 
-  // ⭐ NEW: Handle video requests separately (cache-first)
-  if (request.destination === "video") {
+  // Improved video detection (works even after redirects)
+  const isVideo =
+    url.pathname.endsWith(".mp4") ||
+    url.pathname.endsWith(".webm") ||
+    request.destination === "video";
+
+  // Improved video caching (redirect + CORS support)
+  if (isVideo) {
     event.respondWith(
       caches.open(VIDEO_CACHE).then(async cache => {
         const cached = await cache.match(request);
@@ -61,10 +68,16 @@ self.addEventListener("fetch", event => {
         }
 
         try {
-          const response = await fetch(request);
+          const response = await fetch(request, {
+            mode: "cors",
+            credentials: "omit",
+            redirect: "follow"
+          });
+
           if (response && response.status === 200) {
             cache.put(request, response.clone()); // Save for offline use
           }
+
           return response;
         } catch (err) {
           console.warn("Video fetch failed:", err);
