@@ -2,6 +2,7 @@
 const BASE = self.location.pathname.replace(/\/service-worker\.js$/, '');
 
 const CACHE_NAME = "cer-v1";
+const VIDEO_CACHE = "cer-video-cache-v1";
 
 // Core files to cache (no videos)
 const urlsToCache = [
@@ -46,9 +47,33 @@ self.addEventListener("activate", event => {
   event.waitUntil(self.clients.claim());
 });
 
-// Fetch: navigation + cache-on-demand for all other assets
+// Fetch handler
 self.addEventListener("fetch", event => {
   const request = event.request;
+
+  // ⭐ NEW: Handle video requests separately (cache-first)
+  if (request.destination === "video") {
+    event.respondWith(
+      caches.open(VIDEO_CACHE).then(async cache => {
+        const cached = await cache.match(request);
+        if (cached) {
+          return cached; // Serve offline video
+        }
+
+        try {
+          const response = await fetch(request);
+          if (response && response.status === 200) {
+            cache.put(request, response.clone()); // Save for offline use
+          }
+          return response;
+        } catch (err) {
+          console.warn("Video fetch failed:", err);
+          return null; // No fallback video defined
+        }
+      })
+    );
+    return;
+  }
 
   // Handle navigation (React Router)
   if (request.mode === "navigate") {
@@ -86,7 +111,6 @@ self.addEventListener("fetch", event => {
           return networkResponse;
         })
         .catch(() => {
-          // Optional fallback (could be expanded later)
           return null;
         });
     })
